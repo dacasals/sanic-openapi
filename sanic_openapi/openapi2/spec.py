@@ -12,9 +12,10 @@ class Spec:
             "termsOfService": getattr(app.config, "API_TERMS_OF_SERVICE", ""),
             "license": {
                 "name": getattr(app.config, "API_LICENSE_NAME", ""),
-                "url": getattr(app.config, "API_LICENSE_URL", ""),
             },
         }
+        if hasattr(app.config, "API_LICENSE_URL"):
+            self.info["license"]["url"] = getattr(app.config, "API_LICENSE_URL")
 
         if hasattr(app.config, "API_CONTACT_EMAIL"):
             self.info["contact"] = {"email": app.config.API_CONTACT_EMAIL}

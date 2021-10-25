@@ -8,12 +8,13 @@ from itertools import chain
 
 class Field:
     def __init__(
-        self, description=None, required=None, name=None, choices=None
+        self, description=None, required=None, name=None, choices=None, default=None
     ):
         self.name = name
         self.description = description
         self.required = required
         self.choices = choices
+        self.default = default
 
     def serialize(self):
         output = {}
@@ -25,6 +26,8 @@ class Field:
             output["required"] = self.required
         if self.choices is not None:
             output["enum"] = self.choices
+        if self.default is not None and output["required"] is not True:
+            output["default"] = self.default
         return output
 
 
@@ -141,7 +144,7 @@ class Object(Field):
 
     @property
     def definition(self):
-        return {
+        definition = {
             "type": "object",
             "properties": {
                 key: serialize_schema(schema)
@@ -157,6 +160,24 @@ class Object(Field):
             },
             **super().serialize(),
         }
+
+        for prop_id, property_data in definition["properties"].items():
+            if "required" in property_data:
+                if property_data["required"]:
+                    if "required" not in definition:
+                        definition["required"] = []
+                    definition["required"].append(prop_id)
+                    definition["required"] = list(
+                        set(definition["required"]))
+                if property_data["type"] == "array" and "required" in property_data[
+                    "items"]:
+                    if property_data["items"]["required"]:
+                        definition["required"].append(prop_id)
+                        definition["required"] = list(
+                            set(definition["required"]))
+                    definition["properties"][prop_id]["items"].pop("required")
+                definition["properties"][prop_id].pop("required")
+        return definition
 
     def serialize(self):
         return {

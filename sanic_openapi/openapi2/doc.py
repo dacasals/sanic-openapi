@@ -129,6 +129,18 @@ class UUID(Field):
 definitions = {}
 
 
+def _fix_required_fields(key, required_fields, schema_data):
+    if "required" in schema_data:
+        if schema_data["required"]:
+            required_fields.add(key)
+        schema_data.pop("required")
+    if "type" in schema_data and schema_data["type"] == "array":
+        if "required" in schema_data["items"]:
+            if schema_data["items"]["required"]:
+                required_fields.add(key)
+            schema_data["items"].pop("required")
+
+
 class Object(Field):
     def __init__(self, cls, *args, object_name=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -144,39 +156,27 @@ class Object(Field):
 
     @property
     def definition(self):
+        properties = {}
+        required_fields = set()
+        for key, schema in chain(
+                {
+                    key: getattr(self.cls, key)
+                    for key in dir(self.cls)
+                    if not key.startswith("_")
+                }.items(),
+                typing.get_type_hints(self.cls).items(),
+        ):
+            if not key.startswith("_"):
+                schema_data = serialize_schema(schema)
+                _fix_required_fields(key, required_fields, schema_data)
+                properties[key] = schema_data
+
         definition = {
             "type": "object",
-            "properties": {
-                key: serialize_schema(schema)
-                for key, schema in chain(
-                    {
-                        key: getattr(self.cls, key)
-                        for key in dir(self.cls)
-                        if not key.startswith("_")
-                    }.items(),
-                    typing.get_type_hints(self.cls).items(),
-                )
-                if not key.startswith("_")
-            },
+            "properties": properties,
             **super().serialize(),
+            "required": list(required_fields)
         }
-
-        for prop_id, property_data in definition["properties"].items():
-            if "required" in property_data:
-                if property_data["required"]:
-                    if "required" not in definition:
-                        definition["required"] = []
-                    definition["required"].append(prop_id)
-                    definition["required"] = list(
-                        set(definition["required"]))
-                if property_data["type"] == "array" and "required" in property_data[
-                    "items"]:
-                    if property_data["items"]["required"]:
-                        definition["required"].append(prop_id)
-                        definition["required"] = list(
-                            set(definition["required"]))
-                    definition["properties"][prop_id]["items"].pop("required")
-                definition["properties"][prop_id].pop("required")
         return definition
 
     def serialize(self):
